@@ -1,4 +1,4 @@
-# Comments in Shell Scripting
+#6. Comments in Shell Scripting
 
 Comments are used to explain the code and are ignored by the shell during execution. They are essential for making scripts readable and maintainable.
 
