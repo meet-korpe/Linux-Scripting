@@ -81,5 +81,5 @@ You can run the script using any of these methods:
 
 ## Example
 
-![Shell Scripting example](images/1.png)
+![Shell Scripting example](../images/1.png)
 

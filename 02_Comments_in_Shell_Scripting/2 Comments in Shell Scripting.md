@@ -35,4 +35,4 @@ echo "comments in this script"
 
 ## Example
 
-![Comments in Shell Scripting example](images/2.png)
+![Comments in Shell Scripting example](../images/2.png)
