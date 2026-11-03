@@ -1,255 +1,199 @@
-### **1. Introduction to Containerization & Architecture**
-Containerization is a software deployment method that packages application code along with all its necessary files, libraries, and dependencies into a single, lightweight, and isolated unit called a container.
+### **1. Container Naming, Hostnames, & Local DNS Resolution**
 
-#### **Architecture Components**
-*   **Hardware:** The physical or virtual machine infrastructure.
-*   **Host OS:** The underlying host operating system.
-*   **Container Engine:** Sits on top of the Host OS to manage and run containers.
-*   **Containers:** Individual isolated environments running specific microservices or applications (e.g., Web Service, Pricing Service, Data Service) alongside their required binaries.
+When launching containers, you can explicitly define their **container name** and internal **hostname** for easier identification and internal communication.
 
-#### **Mermaid Diagram: Containerization Architecture**
+```mermaid
+graph LR
+    A[Host Machine] -- "docker container run" --> B[Container: indigo]
+    subgraph Container Networking
+        B -- "Hostname" --> C[jet / newcont]
+        B -- "Internal IP" --> D[172.17.0.2 / docker0 Bridge]
+    end
+    B -- "/etc/hosts" --> E[Custom Local DNS Mapping]
+```
+
+#### **Step-by-Step Commands:**
+1. **Launch a container with a custom name and hostname**:
+   ```bash
+   docker container run -it --name indigo --hostname jet ubuntu
+   ```
+   *This creates a container named `indigo` with the internal hostname `jet`.*
+
+2. **Verify container IP and configure local DNS inside container**:
+   ```bash
+   # Check internal container IP (e.g., 172.17.0.2)
+   ifconfig
+   
+   # Add a local DNS mapping inside /etc/hosts
+   vi /etc/hosts
+   ```
+   Add the following entry to map the IP address to the custom hostname:
+   ```text
+   172.17.0.2    indigo
+   ```
+   *(This allows pinging and communicating via `indigo` instead of raw IP addresses).*
+
+3. **Install and run Nginx web server inside the container**:
+   ```bash
+   apt-get update -y
+   apt-get install nginx -y
+   cd /var/www/html/
+   echo "welcome to skillops gang" > index.nginx-debian.html
+   service nginx start
+   ```
+   *(Initializes the Nginx web server inside the container).*
+
+---
+
+### **2. Port Binding (`-p`) & AWS Security Group Configuration**
+
+By default, container ports are isolated within the internal `docker0` bridge network and cannot be accessed from outside the host machine. **Port Binding** maps a port on the **Host Machine** to a port inside the **Container**.
+
+#### **Port Binding Architecture Diagram**
 ```mermaid
 graph TD
-    subgraph Host Infrastructure
-        HW[Hardware]
-        OS[Host Operating System]
-        Engine[Container Engine: Docker / containerd / Podman]
-        HW --> OS
-        OS --> Engine
+    Client[External Client / Web Browser] -->|Public IP : 3600| Host[Host Machine / AWS EC2]
+    subgraph Port Mapping
+        Host -->|Host Port: 3600| Bridge[docker0 Network]
+        Bridge -->|Container Port: 80| Container[Ubuntu Container: container1]
     end
-    
-    subgraph Isolated Containers
-        C1[Container 1: Web Service + Binaries]
-        C2[Container 2: Pricing Service + Binaries]
-        C3[Container 3: Data Service + Binaries]
-    end
-    
-    Engine --> C1
-    Engine --> C2
-    Engine --> C3
 ```
 
-#### **Advantages of Containerization**
-1.  **Lightweight:** No full guest OS required; uses less RAM and CPU.
-2.  **Fast Startup:** Containers boot in seconds.
-3.  **Resource Sharing:** Multiple containers share host kernel resources efficiently.
-4.  **Better Resource Usage & Portability:** Applications run consistently across environments.
-5.  **Isolation & Scaling:** Keeps applications isolated and allows easy scaling.
-6.  **DevOps & CI/CD Friendly:** Ideal for continuous integration and delivery pipelines.
+#### **Step-by-Step Commands & Workflow:**
 
-#### **Popular Containerization Engines**
-*   **containerd**
-*   **Podman**
-*   **CRI-O**
-*   **Docker:** The most popular engine due to its ease of use, fast deployment, massive ecosystem, and integration with DevOps tools.
+1. **Launch a container with explicit port binding**:
+   ```bash
+   docker container run -it --name container1 --hostname newcont -p 3600:80 ubuntu
+   ```
+   *Syntax:* `docker run -p <hostport>:<containerport> <image>`.
+   *(Maps host port `3600` to container web port `80`).*
+
+2. **Configure AWS EC2 Inbound Security Group Rules (for Cloud Deployments)**:
+   * Navigate to **AWS Console** > **EC2** > **Security Groups**.
+   * Click **Edit inbound rules**.
+   * Add a new rule:
+     * **Type:** Custom TCP
+     * **Port range:** `3600`
+     * **Source:** `0.0.0.0/0` (Anywhere-IPv4).
+   * Click **Save rules**.
+
+3. **Verify external web access**:
+   Open a browser and navigate to:
+   ```text
+   http://<EC2_Public_IP>:3600
+   ```
+   *(The page displays the web page served directly from inside the container).*
 
 ---
 
-### **2. Docker Concepts: Image vs. Container**
-*   **Docker Image:** A ready-made package/template containing application files, libraries, dependencies, and configuration settings required to run an application.
-*   **Docker Container:** A running instance instantiated from a Docker image (e.g., a running Apache web server or Hello World container).
+### **3. Container Archiving: Export & Import Workflow**
+
+Instead of using `docker commit` to build an image, you can export a container's entire filesystem into a `.tar` archive for backup or transfer across systems, and then import it back as a new Docker image.
+
+```mermaid
+graph LR
+    A[Running Container] -- "docker container export" --> B[container2.tar Snapshot]
+    B -- "docker image import" --> C[New Image: container2:latest]
+    C -- "docker container run" --> D[New Running Container]
+```
+
+#### **Step-by-Step Commands:**
+
+1. **Export a running container to a tar archive**:
+   ```bash
+   docker container export container2 -o container2.tar
+   ls
+   ```
+   *(Generates a snapshot file named `container2.tar` on the host machine).*
+
+2. **Stop and remove the original container**:
+   ```bash
+   docker container stop container2
+   docker container rm container2
+   ```
+   *(Cleans up the existing container instance).*
+
+3. **Import the tar archive as a new Docker image**:
+   ```bash
+   docker image import container2.tar container2:latest
+   docker images
+   ```
+   *(Creates a new local image named `container2:latest`).*
+
+4. **Launch a new container from the imported image**:
+   ```bash
+   docker container run -itd --name container2 -p 8000:80 --hostname webserver container2:latest /bin/bash
+   ```
+   *Note: Imported images require an explicit command execution path like `/bin/bash` when starting.*
 
 ---
 
-### **3. Step-by-Step Installation of Docker on Ubuntu**
+### **4. Container Inspection & Log Management**
 
-#### **Step 1: Set Up Docker's Apt Repository & Keys**  
-
-####  Do this step from google - Docker installation on Ubuntu
+To inspect container metadata or view runtime stdout/stderr output:
 
 ```bash
-# 1. Update system package index
-sudo apt update
+# Display standard container logs
+docker logs <container_id_or_name>
 
-# 2. Install prerequisites
-sudo apt install ca-certificates curl -y
+# Stream live container logs continuously (-f / follow mode)
+docker logs -f <container_id_or_name>
 
-# 3. Create directory for keyring permissions
-sudo install -m 0755 -d /etc/apt/keyrings
-
-# 4. Download Docker's official GPG key
-sudo curl -fsSL [suspicious link removed] -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# 5. Add the repository to Apt sources
-sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: [suspicious link removed]
-Suites: $(. /etc/os-release && echo "$UBUNTU_CODENAME")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
+# Inspect internal network details, IP addresses, and gateway
+docker inspect <container_name>
 ```
-**
-
-#### **Step 2: Install Docker Engine and Dependencies**
-```bash
-# 1. Update apt repository list
-sudo apt update
-
-# 2. Install Docker components
-sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
-```
-**
-
-#### **Step 3: Service Management & Verification**
-```bash
-# Start and verify Docker daemon service
-sudo systemctl start docker
-sudo systemctl status docker
-
-# Test installation with hello-world image
-sudo docker run hello-world
-```
-**
+*(Displays real-time logs and detailed JSON network configurations).*
 
 ---
 
-### **4. Step-by-Step Docker Commands & Lifecycle Operations**
+### **5. Database Container Setup & Docker Compose**
 
-#### **A. Pulling & Inspecting Images**
+Database applications like **MongoDB** require runtime environment variables (`-e`) for root administrative credentials and initial configuration.
+
+#### **A. Direct CLI Execution for MongoDB**:
 ```bash
-# Download images from Docker Hub
-docker pull ubuntu
-docker pull nginx
-docker pull apache2
-
-# List local Docker images
-docker images
+docker run -d \
+  -p 27017:27017 \
+  -e MONGO_INITDB_ROOT_USERNAME=admin \
+  -e MONGO_INITDB_ROOT_PASSWORD=.redhat \
+  --name mongo \
+  mongo
 ```
-**
+*(Starts MongoDB with port mapping `27017:27017` and root credentials).*
 
-#### **B. Running Containers**
-*   **Interactive Mode (`-it`):** Attaches your terminal directly to the container's shell.
-    ```bash
-    docker run -it ubuntu /bin/bash
-    ```
-*   **Detached Background Mode (`-d` / `-itd`):** Runs the container silently in the background.
-    ```bash
-    docker run -d ubuntu
-    docker run -itd ubuntu
-    ```
+#### **B. Docker Compose Deployment (`file.yaml`)**:
+Instead of long CLI parameters, define the configuration inside a custom YAML file:
 
-#### **C. Exiting vs. Detaching**
-*   **To exit and stop container:** Type `exit` inside the container terminal.
-*   **To detach without stopping:** Press **`Ctrl  P + Q`**.
+```yaml
+version: "3.8"
 
-#### **D. Listing Active & Inactive Containers**
+services:
+  mongo:
+    image: mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: .redhat
+```
+
+**Execute Compose using a custom file name**:
 ```bash
-# View running containers only
-docker ps
-# or
-docker container ls
-
-# View all containers (running + stopped)
-docker ps -a
-# or
-docker container ls -a
+docker compose -f file.yaml up -d
 ```
-**
-
-#### **E. Managing Container States**
-```bash
-# Stop a running container
-docker stop <container_id_or_name>
-
-# Start a stopped container
-docker start <container_id_or_name>
-
-# Restart a container
-docker restart <container_id_or_name>
-
-# Remove a stopped container
-docker rm <container_id_or_name>
-
-# Forcefully remove a running container
-docker rm -f <container_id_or_name>
-
-# Remove multiple containers at once
-docker rm <id1> <id2> <id3>
-```
-**
-
-#### **F. Accessing Running Containers (`docker exec`)**
-To attach a shell session to an already running background container:
-```bash
-docker exec -it <container_id_or_name> /bin/bash
-```
-**
+*(Deploys the MongoDB container in detached mode using the custom file `file.yaml`).*
 
 ---
 
-### **5. Practical Lab: Hosting a Web Server Inside an Apache Container**
+### **6. Comprehensive Command Quick Reference**
 
-This step-by-step workflow demonstrates how to deploy and test an Apache web application inside a container.
-
-#### **Step 1: Launch a detached container**
-```bash
-docker run -itd ubuntu
-```
-**
-
-#### **Step 2: Enter the running container**
-```bash
-docker exec -it <container_id> /bin/bash
-```
-**
-
-#### **Step 3: Update packages & install Apache2 inside container**
-```bash
-apt update -y
-apt install apache2 -y
-```
-**
-
-#### **Step 4: Create a custom web page**
-```bash
-cd /var/www/html
-echo "welcome to my first container" > index.html
-cat index.html
-```
-**
-
-#### **Step 5: Start the Apache Web Service**
-```bash
-service apache2 status
-service apache2 start
-service apache2 status
-```
-**
-
-#### **Step 6: Inspect IP Address & Test via `curl`**
-Exit the container terminal back to the host machine:
-```bash
-# Inspect container metadata to obtain the IP address (e.g., 172.17.0.2)
-docker inspect <container_id>
-
-# Send HTTP request to verify web page deployment
-curl http://<container_ip>
-# Expected Output: welcome to my first container
-```
-**
-
----
-
-### **6. Quick Reference Command Summary Table**
-
-| Category | Command | Description | Source |
+| Task | Command | Description | Source |
 | :--- | :--- | :--- | :--- |
-| **System Info** | `docker info` | Displays overall Docker system configuration. | |
-| **Image Pull** | `docker pull <image>` | Downloads an image from Docker Hub. | |
-| **List Images** | `docker images` | Displays local downloaded images. | |
-| **Interactive Run**| `docker run -it <image>` | Launches container interactively. | |
-| **Background Run**| `docker run -itd <image>` | Launches container in background. | |
-| **List Running** | `docker ps` | Lists active containers. | |
-| **List All** | `docker ps -a` | Lists all active and stopped containers. | |
-| **Stop** | `docker stop <id>` | Gracefully stops a running container. | |
-| **Start** | `docker start <id>` | Boots up a stopped container. | |
-| **Restart** | `docker restart <id>` | Restarts a container instance. | |
-| **Remove** | `docker rm <id>` | Deletes a stopped container. | |
-| **Force Remove** | `docker rm -f <id>` | Forces deletion of a running container. | |
-| **Execute Shell** | `docker exec -it <id> bash` | Opens a new bash shell in a running container. | |
-| **Inspect Details**| `docker inspect <id>` | Shows detailed JSON configuration & IP addresses. | |
-
----
+| **Run with Hostname** | `docker container run -it --name <name> --hostname <host> <image>` | Assigns custom name and internal hostname. | |
+| **Port Binding** | `docker run -p <host_port>:<container_port> <image>` | Binds host port to container port. | |
+| **Export Container** | `docker container export <container> -o <file.tar>` | Exports container filesystem to tar archive. | |
+| **Import Image** | `docker image import <file.tar> <image_name:tag>` | Creates a Docker image from tar archive. | |
+| **View Logs** | `docker logs <container_id>` | Prints container console logs. | |
+| **Follow Logs** | `docker logs -f <container_id>` | Continuously streams live logs. | |
+| **Run with Env Vars**| `docker run -e KEY=VALUE <image>` | Passes environment variables to container. | |
+| **Compose Custom File**| `docker compose -f <filename.yaml> up -d` | Launches compose stack using custom file. | |
