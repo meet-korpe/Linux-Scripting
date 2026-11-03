@@ -133,7 +133,7 @@ docker images
 
 #### **C. Exiting vs. Detaching**
 *   **To exit and stop container:** Type `exit` inside the container terminal.
-*   **To detach without stopping:** Press **`Ctrl + P`**, then **`Ctrl + Q`**.
+*   **To detach without stopping:** Press **`Ctrl  P + Q`**.
 
 #### **D. Listing Active & Inactive Containers**
 ```bash
