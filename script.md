@@ -55,7 +55,7 @@ graph TD
 
 #### **Step 1: Set Up Docker's Apt Repository & Keys**  
 
-##  Do this step from google - Docker installation on Ubuntu
+####  Do this step from google - Docker installation on Ubuntu
 
 ```bash
 # 1. Update system package index
