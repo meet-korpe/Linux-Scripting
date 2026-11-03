@@ -53,7 +53,10 @@ graph TD
 
 ### **3. Step-by-Step Installation of Docker on Ubuntu**
 
-#### **Step 1: Set Up Docker's Apt Repository & Keys**
+#### **Step 1: Set Up Docker's Apt Repository & Keys**  
+
+##  Do this step from google - Docker installation on Ubuntu
+
 ```bash
 # 1. Update system package index
 sudo apt update
